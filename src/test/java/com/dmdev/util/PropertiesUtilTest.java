@@ -12,7 +12,7 @@ class PropertiesUtilTest {
 
     @ParameterizedTest
     @MethodSource("getPropertyArguments")
-    void checkGet(String key, String expectedValue) {
+    void getSuccess(String key, String expectedValue) {
         var actualResult = PropertiesUtil.get(key);
 
         assertThat(actualResult)

@@ -26,7 +26,7 @@ class CreateSubscriptionValidatorTest {
     }
 
     @Test
-    void invalidUserId() {
+    void validateFailedIfInvalidUserId() {
         var dto = CreateSubscriptionDto.builder()
                                        .expirationDate(Instant.parse("2025-12-03T10:15:30.00Z"))
                                        .name("Alex")
@@ -46,7 +46,7 @@ class CreateSubscriptionValidatorTest {
     }
 
     @Test
-    void invalidName() {
+    void validateFailedIfInvalidName() {
         var dto = CreateSubscriptionDto.builder()
                                        .userId(1)
                                        .expirationDate(Instant.parse("2025-12-03T10:15:30.00Z"))
@@ -67,7 +67,7 @@ class CreateSubscriptionValidatorTest {
     }
 
     @Test
-    void invalidProvider() {
+    void validateFailedIfInvalidProvider() {
         var dto = CreateSubscriptionDto.builder()
                                        .userId(1)
                                        .expirationDate(Instant.parse("2025-12-03T10:15:30.00Z"))
@@ -88,7 +88,7 @@ class CreateSubscriptionValidatorTest {
     }
 
     @Test
-    void expirationDateIsNull() {
+    void validateFailedIfExpirationDateIsNull() {
         var dto = CreateSubscriptionDto.builder()
                                        .userId(1)
                                        .name("Alex")
@@ -108,7 +108,7 @@ class CreateSubscriptionValidatorTest {
     }
 
     @Test
-    void invalidExpirationDate() {
+    void validateFailedIfInvalidExpirationDate() {
         var dto = CreateSubscriptionDto.builder()
                                        .userId(1)
                                        .name("Alex")
@@ -129,7 +129,7 @@ class CreateSubscriptionValidatorTest {
     }
 
     @Test
-    void invalidUserIdNameProviderExpirationDate() {
+    void validateFailedIfInvalidUserIdNameProviderExpirationDate() {
         var dto = CreateSubscriptionDto.builder()
                                        .name("")
                                        .expirationDate(Instant.parse("2020-12-03T10:15:30.00Z"))
@@ -140,15 +140,11 @@ class CreateSubscriptionValidatorTest {
 
         assertThat(actualResult.hasErrors()).isTrue();
         assertThat(actualResult.getErrors()).hasSize(4);
-        var errorCodes = actualResult.getErrors()
-                                     .stream()
-                                     .map(Error::getCode)
-                                     .toList();
-        assertThat(errorCodes).contains(100, 101, 102, 103);
-        var errorMessages = actualResult.getErrors()
-                                        .stream()
-                                        .map(Error::getMessage)
-                                        .toList();
-        assertThat(errorMessages).contains("userId is invalid", "expirationDate is invalid", "name is invalid", "provider is invalid");
+        assertThat(actualResult.getErrors()).containsExactly(
+                Error.of(100, "userId is invalid"),
+                Error.of(101, "name is invalid"),
+                Error.of(102, "provider is invalid"),
+                Error.of(103, "expirationDate is invalid")
+        );
     }
 }

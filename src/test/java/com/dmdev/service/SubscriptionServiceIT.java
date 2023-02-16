@@ -13,7 +13,9 @@ import java.time.Clock;
 import java.time.Instant;
 
 import static com.dmdev.entity.Provider.GOOGLE;
-import static com.dmdev.entity.Status.*;
+import static com.dmdev.entity.Status.CANCELED;
+import static com.dmdev.entity.Status.EXPIRED;
+import static com.dmdev.entity.Status.ACTIVE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class SubscriptionServiceIT extends IntegrationTestBase {
@@ -33,7 +35,7 @@ public class SubscriptionServiceIT extends IntegrationTestBase {
     }
 
     @Test
-    void upsert() {
+    void upsertSuccess() {
         var createSubscriptionDto = getCreateSubscriptionDto();
 
         var actualResult = subscriptionService.upsert(createSubscriptionDto);
@@ -42,7 +44,7 @@ public class SubscriptionServiceIT extends IntegrationTestBase {
     }
 
     @Test
-    void cancel() {
+    void cancelSuccess() {
         var subscription = subscriptionDao.insert(getSubscription());
 
         subscriptionService.cancel(subscription.getId());
@@ -53,7 +55,7 @@ public class SubscriptionServiceIT extends IntegrationTestBase {
     }
 
     @Test
-    void expire() {
+    void expireSuccess() {
         var subscription = subscriptionDao.insert(getSubscription());
 
         subscriptionService.expire(subscription.getId());

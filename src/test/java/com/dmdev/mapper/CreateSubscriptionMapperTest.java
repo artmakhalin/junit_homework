@@ -15,7 +15,7 @@ class CreateSubscriptionMapperTest {
     private final CreateSubscriptionMapper mapper = CreateSubscriptionMapper.getInstance();
 
     @Test
-    void map() {
+    void mapSuccess() {
         var dto = CreateSubscriptionDto.builder()
                                        .userId(1)
                                        .expirationDate(Instant.parse("2025-12-03T10:15:30.00Z"))

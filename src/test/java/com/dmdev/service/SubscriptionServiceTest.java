@@ -10,6 +10,7 @@ import com.dmdev.mapper.CreateSubscriptionMapper;
 import com.dmdev.validator.CreateSubscriptionValidator;
 import com.dmdev.validator.Error;
 import com.dmdev.validator.ValidationResult;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -23,10 +24,14 @@ import java.util.List;
 import java.util.Optional;
 
 import static com.dmdev.entity.Provider.GOOGLE;
-import static com.dmdev.entity.Status.*;
+import static com.dmdev.entity.Status.ACTIVE;
+import static com.dmdev.entity.Status.CANCELED;
+import static com.dmdev.entity.Status.EXPIRED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class SubscriptionServiceTest {
@@ -42,107 +47,117 @@ class SubscriptionServiceTest {
     @InjectMocks
     private SubscriptionService subscriptionService;
 
-    @Test
-    void upsertSuccessNewSubscription() {
-        var createSubscriptionDto = getCreateSubscriptionDto();
-        var subscription = getSubscription(null, ACTIVE);
-        doReturn(new ValidationResult()).when(createSubscriptionValidator)
-                                        .validate(createSubscriptionDto);
-        doReturn(new ArrayList<Subscription>()).when(subscriptionDao)
-                                               .findByUserId(createSubscriptionDto.getUserId());
-        doReturn(subscription).when(createSubscriptionMapper)
-                              .map(createSubscriptionDto);
-        doReturn(subscription).when(subscriptionDao)
-                              .upsert(subscription);
+    @Nested
+    class UpsertTest {
 
-        var actualResult = subscriptionService.upsert(createSubscriptionDto);
+        private final CreateSubscriptionDto createSubscriptionDto = getCreateSubscriptionDto();
+        private final Subscription subscription = getSubscription(null, ACTIVE);
+        private final ValidationResult validationResult = new ValidationResult();
 
-        assertThat(actualResult).isEqualTo(subscription);
-        verify(subscriptionDao).upsert(subscription);
-        verify(subscriptionDao).findByUserId(createSubscriptionDto.getUserId());
-        verify(createSubscriptionValidator).validate(createSubscriptionDto);
-        verify(createSubscriptionMapper).map(createSubscriptionDto);
+        @Test
+        void upsertSuccessIfNewSubscription() {
+            doReturn(validationResult).when(createSubscriptionValidator)
+                                      .validate(createSubscriptionDto);
+            doReturn(new ArrayList<Subscription>()).when(subscriptionDao)
+                                                   .findByUserId(createSubscriptionDto.getUserId());
+            doReturn(subscription).when(createSubscriptionMapper)
+                                  .map(createSubscriptionDto);
+            doReturn(subscription).when(subscriptionDao)
+                                  .upsert(subscription);
+
+            var actualResult = subscriptionService.upsert(createSubscriptionDto);
+
+            assertThat(actualResult).isEqualTo(subscription);
+            verify(subscriptionDao).upsert(subscription);
+            verify(subscriptionDao).findByUserId(createSubscriptionDto.getUserId());
+            verify(createSubscriptionValidator).validate(createSubscriptionDto);
+            verify(createSubscriptionMapper).map(createSubscriptionDto);
+        }
+
+        @Test
+        void upsertSuccessIfExistingSubscription() {
+            var existingSubscription = getSubscription(null, CANCELED);
+            doReturn(validationResult).when(createSubscriptionValidator)
+                                      .validate(createSubscriptionDto);
+            doReturn(List.of(existingSubscription)).when(subscriptionDao)
+                                                   .findByUserId(createSubscriptionDto.getUserId());
+            doReturn(subscription).when(subscriptionDao)
+                                  .upsert(subscription);
+
+            var actualResult = subscriptionService.upsert(createSubscriptionDto);
+
+            assertThat(actualResult).isEqualTo(subscription);
+            verify(subscriptionDao).upsert(subscription);
+            verify(subscriptionDao).findByUserId(createSubscriptionDto.getUserId());
+            verify(createSubscriptionValidator).validate(createSubscriptionDto);
+        }
+
+        @Test
+        void upsertShouldThrowExceptionIfDtoInvalid() {
+            validationResult.add(Error.of(100, "userId is invalid"));
+            doReturn(validationResult).when(createSubscriptionValidator)
+                                      .validate(createSubscriptionDto);
+
+            assertThatExceptionOfType(ValidationException.class)
+                    .isThrownBy(() -> subscriptionService.upsert(createSubscriptionDto));
+            verifyNoInteractions(subscriptionDao, createSubscriptionMapper);
+        }
     }
 
-    @Test
-    void upsertSuccessUpdateExistingSubscription() {
-        var createSubscriptionDto = getCreateSubscriptionDto();
-        var subscription = getSubscription(null, ACTIVE);
-        var existingSubscription = getSubscription(null, CANCELED);
-        doReturn(new ValidationResult()).when(createSubscriptionValidator)
-                                        .validate(createSubscriptionDto);
-        doReturn(List.of(existingSubscription)).when(subscriptionDao)
-                                               .findByUserId(createSubscriptionDto.getUserId());
-        doReturn(subscription).when(subscriptionDao)
-                              .upsert(subscription);
+    @Nested
+    class CancelTest {
 
-        var actualResult = subscriptionService.upsert(createSubscriptionDto);
+        @Test
+        void cancelSuccess() {
+            var subscription = getSubscription(1, ACTIVE);
+            doReturn(Optional.of(subscription)).when(subscriptionDao)
+                                               .findById(subscription.getId());
 
-        assertThat(actualResult).isEqualTo(subscription);
-        verify(subscriptionDao).upsert(subscription);
-        verify(subscriptionDao).findByUserId(createSubscriptionDto.getUserId());
-        verify(createSubscriptionValidator).validate(createSubscriptionDto);
+            subscriptionService.cancel(subscription.getId());
+
+            assertThat(subscription.getStatus()).isSameAs(CANCELED);
+            verify(subscriptionDao).findById(subscription.getId());
+            verify(subscriptionDao).update(subscription);
+        }
+
+        @Test
+        void cancelShouldThrowExceptionIfSubscriptionIsNotActive() {
+            var cancelledSubscription = getSubscription(1, CANCELED);
+            doReturn(Optional.of(cancelledSubscription)).when(subscriptionDao)
+                                                        .findById(cancelledSubscription.getId());
+
+            assertThatExceptionOfType(SubscriptionException.class)
+                    .isThrownBy(() -> subscriptionService.cancel(cancelledSubscription.getId()));
+            verify(subscriptionDao).findById(cancelledSubscription.getId());
+        }
     }
 
-    @Test
-    void shouldThrowExceptionIfDtoInvalid() {
-        var createSubscriptionDto = getCreateSubscriptionDto();
-        var validationResult = new ValidationResult();
-        validationResult.add(Error.of(100, "userId is invalid"));
-        doReturn(validationResult).when(createSubscriptionValidator)
-                                  .validate(createSubscriptionDto);
+    @Nested
+    class ExpireTest {
 
-        assertThatExceptionOfType(ValidationException.class)
-                .isThrownBy(() -> subscriptionService.upsert(createSubscriptionDto));
-        verifyNoInteractions(subscriptionDao, createSubscriptionMapper);
-    }
+        @Test
+        void expireSuccess() {
+            var subscription = getSubscription(1, ACTIVE);
+            doReturn(Optional.of(subscription)).when(subscriptionDao)
+                                               .findById(subscription.getId());
 
-    @Test
-    void cancelSuccess() {
-        var subscription = getSubscription(1, ACTIVE);
-        doReturn(Optional.of(subscription)).when(subscriptionDao)
-                                           .findById(subscription.getId());
+            subscriptionService.expire(subscription.getId());
 
-        subscriptionService.cancel(subscription.getId());
+            assertThat(subscription.getStatus()).isSameAs(EXPIRED);
+            verify(subscriptionDao).findById(subscription.getId());
+            verify(subscriptionDao).update(subscription);
+        }
 
-        assertThat(subscription.getStatus()).isSameAs(CANCELED);
-        verify(subscriptionDao).findById(subscription.getId());
-        verify(subscriptionDao).update(subscription);
-    }
+        @Test
+        void expireShouldThrowExceptionIfSubscriptionIsExpired() {
+            var expiredSubscription = getSubscription(1, EXPIRED);
+            doReturn(Optional.of(expiredSubscription)).when(subscriptionDao)
+                                                      .findById(expiredSubscription.getId());
 
-    @Test
-    void shouldThrowExceptionIfSubscriptionIsNotActive() {
-        var cancelledSubscription = getSubscription(1, CANCELED);
-        doReturn(Optional.of(cancelledSubscription)).when(subscriptionDao)
-                                                    .findById(cancelledSubscription.getId());
-
-        assertThatExceptionOfType(SubscriptionException.class)
-                .isThrownBy(() -> subscriptionService.cancel(cancelledSubscription.getId()));
-        verify(subscriptionDao).findById(cancelledSubscription.getId());
-    }
-
-    @Test
-    void expireSuccess() {
-        var subscription = getSubscription(1, ACTIVE);
-        doReturn(Optional.of(subscription)).when(subscriptionDao)
-                                           .findById(subscription.getId());
-
-        subscriptionService.expire(subscription.getId());
-
-        assertThat(subscription.getStatus()).isSameAs(EXPIRED);
-        verify(subscriptionDao).findById(subscription.getId());
-        verify(subscriptionDao).update(subscription);
-    }
-
-    @Test
-    void shouldThrowExceptionIfSubscriptionIsExpired() {
-        var expiredSubscription = getSubscription(1, EXPIRED);
-        doReturn(Optional.of(expiredSubscription)).when(subscriptionDao)
-                                                  .findById(expiredSubscription.getId());
-
-        assertThatExceptionOfType(SubscriptionException.class)
-                .isThrownBy(() -> subscriptionService.expire(expiredSubscription.getId()));
-        verify(subscriptionDao).findById(expiredSubscription.getId());
+            assertThatExceptionOfType(SubscriptionException.class)
+                    .isThrownBy(() -> subscriptionService.expire(expiredSubscription.getId()));
+            verify(subscriptionDao).findById(expiredSubscription.getId());
+        }
     }
 
     private CreateSubscriptionDto getCreateSubscriptionDto() {
